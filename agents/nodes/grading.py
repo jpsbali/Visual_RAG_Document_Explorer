@@ -91,7 +91,7 @@ Evaluate relevance."""
             except:
                 score = 0.5
             
-            relevance_scores[doc.chunk_id] = score
+            relevance_scores[doc.metadata.chunk_id] = score
         
         # Calculate average relevance
         avg_relevance = sum(relevance_scores.values()) / len(relevance_scores) if relevance_scores else 0.5

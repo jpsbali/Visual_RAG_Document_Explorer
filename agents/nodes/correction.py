@@ -129,8 +129,8 @@ Reformulate the query."""
         seen_ids = set()
         merged_chunks = []
         for chunk in all_chunks:
-            if chunk.chunk_id not in seen_ids:
-                seen_ids.add(chunk.chunk_id)
+            if chunk.metadata.chunk_id not in seen_ids:
+                seen_ids.add(chunk.metadata.chunk_id)
                 merged_chunks.append(chunk)
         
         logger.info(f"Corrective retrieval added {len(new_chunks)} new chunks")

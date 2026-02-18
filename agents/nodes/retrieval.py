@@ -83,8 +83,8 @@ async def retrieval_node(state: AgentState) -> dict[str, Any]:
         seen_ids = set()
         unique_chunks = []
         for chunk in all_chunks:
-            if chunk.chunk_id not in seen_ids:
-                seen_ids.add(chunk.chunk_id)
+            if chunk.metadata.chunk_id not in seen_ids:
+                seen_ids.add(chunk.metadata.chunk_id)
                 unique_chunks.append(chunk)
         
         retrieval_metadata = {

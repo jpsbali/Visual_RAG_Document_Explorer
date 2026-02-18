@@ -35,14 +35,14 @@ async def citation_node(state: AgentState) -> dict[str, Any]:
             supported_claims = [
                 detail["claim"]
                 for detail in state.get("grounding_details", [])
-                if detail.get("supporting_chunk") == chunk.chunk_id
+                if detail.get("supporting_chunk") == chunk.metadata.chunk_id
             ]
             
             if supported_claims or not state.get("grounding_details"):
                 citation = Citation(
                     source_file=chunk.metadata.source_file,
                     page_number=chunk.metadata.page_number,
-                    chunk_id=chunk.chunk_id,
+                    chunk_id=chunk.metadata.chunk_id,
                     relevant_text=chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
                     claims_supported=supported_claims
                 )
