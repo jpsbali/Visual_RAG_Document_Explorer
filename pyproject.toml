@@ -1,0 +1,120 @@
+# This project uses standard Python packaging (PEP 621) with setuptools, NOT Poetry
+# Install with: pip install -e ".[dev]" or make install
+# Do NOT use: poetry install
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visual-rag-explorer"
+version = "0.1.0"
+description = "Advanced RAG document exploration system with multi-strategy retrieval, NER-based metadata extraction, and dual vector database support"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Visual RAG Team"}
+]
+keywords = ["rag", "retrieval", "document-processing", "vector-database", "llm", "langchain", "langgraph"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # LangChain ecosystem
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-voyageai>=0.2.0",
+    "langchain-cohere>=0.3.0",
+    "langgraph>=0.2.0",
+    
+    # Vector databases
+    "qdrant-client>=1.12.0",
+    "pymilvus>=2.4.0",
+    
+    # UI
+    "streamlit>=1.40.0",
+    
+    # Embeddings
+    "sentence-transformers>=3.0.0",
+    "voyageai>=0.3.0",
+    
+    # NER and NLP
+    "gliner>=0.2.0",
+    "spacy>=3.8.0",
+    "en-core-web-trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl",
+    
+    # Search
+    "rank-bm25>=0.2.2",
+    
+    # Document processing
+    "pdfplumber>=0.11.0",
+    "pypdf>=5.0.0",
+    "python-docx>=1.1.0",
+    "docx2txt>=0.8",
+    "beautifulsoup4>=4.12.0",
+    
+    # Reranking
+    "cohere>=5.0.0",
+    
+    # Configuration and validation
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "python-dotenv>=1.0.0",
+    
+    # Visualization and data analysis
+    "plotly>=5.24.0",
+    "pandas>=2.0.0",
+    
+    # System monitoring
+    "psutil>=5.9.0",
+    
+    # Utilities
+    "tiktoken>=0.8.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.7.0",
+    "black>=24.0.0",
+    "mypy>=1.13.0",
+    "ipython>=8.29.0",
+]
+
+[tool.setuptools]
+packages = ["config", "core", "agents", "ui", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
