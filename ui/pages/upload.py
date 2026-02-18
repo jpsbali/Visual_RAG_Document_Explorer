@@ -27,6 +27,7 @@ from core.document_processing.summarizer import DocumentSummarizer
 from core.document_processing.deduplication import DeduplicationService
 from core.embeddings.embedding_router import get_embedding_service
 from core.vectordb.router import get_vector_store
+from core.llm.llm_router import get_llm_provider
 from config.settings import Settings
 from config.models import ChunkMetadata, NEREntities
 from ui.components import render_sidebar
@@ -340,8 +341,9 @@ async def process_document(
                 st.write("📝 **Step 4/7:** Generating summary...")
             progress_bar.progress(55, text="Generating summary...")
             
-            summarizer = DocumentSummarizer(settings)
-            summary = summarizer.summarize_document(document.page_content)
+            llm_provider = get_llm_provider(settings)
+            summarizer = DocumentSummarizer(llm_provider)
+            summary = await summarizer.summarize(document.page_content, uploaded_file.name)
             st.write(f"   ✓ Generated summary ({len(summary.split())} words)")
             
             # Display summary
@@ -366,13 +368,13 @@ async def process_document(
                 return None
         else:
             # Check semantic similarity
-            doc_embedding = get_embedding_service(settings).embed_text(document.page_content[:1000])
-            similarity = deduplicator.check_semantic_duplicate(
-                content_hash,
+            doc_embedding = await get_embedding_service(settings).embed_query(document.page_content[:1000])
+            is_duplicate, similarity = await deduplicator.check_semantic_duplicate(
+                document.page_content[:1000],
                 doc_embedding
             )
             
-            if similarity > 0.85:
+            if is_duplicate or similarity > 0.85:
                 st.write(f"   ⚠️ Near duplicate detected (similarity: {similarity:.2%})")
                 should_continue = render_deduplication_feedback(True, similarity)
                 if not should_continue:
@@ -392,7 +394,7 @@ async def process_document(
         
         embedding_service = get_embedding_service(settings)
         chunk_texts = [chunk.page_content for chunk in chunks]
-        embeddings = embedding_service.embed_documents(chunk_texts)
+        embeddings = await embedding_service.embed_documents(chunk_texts)
         
         st.write(f"   ✓ Generated {len(embeddings)} embeddings")
         

@@ -6,7 +6,7 @@ Provides async operations for document storage and retrieval using Qdrant.
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
-    Distance, VectorParams, PointStruct, 
+    Distance, VectorParams, PointStruct,
     Filter, FieldCondition, MatchAny
 )
 from config.models import ChunkMetadata, RetrievedChunk
@@ -14,6 +14,8 @@ from config.settings import Settings
 from .base import VectorStoreBase
 from typing import Optional
 import logging
+import uuid
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,21 @@ class QdrantStore(VectorStoreBase):
         self.client = AsyncQdrantClient(url=settings.qdrant_url, check_compatibility=False)
         self.default_collection = settings.qdrant_collection
         logger.info(f"Initialized Qdrant store at {settings.qdrant_url}")
+    
+    @staticmethod
+    def _string_to_uuid(string_id: str) -> str:
+        """
+        Convert a string ID to a valid UUID.
+        
+        Args:
+            string_id: String identifier
+            
+        Returns:
+            UUID string
+        """
+        # Create a deterministic UUID from the string using MD5 hash
+        hash_bytes = hashlib.md5(string_id.encode()).digest()
+        return str(uuid.UUID(bytes=hash_bytes))
         
     async def create_collection(
         self, 
@@ -102,16 +119,29 @@ class QdrantStore(VectorStoreBase):
             Count of upserted documents
         """
         try:
+            # Check if collection exists, create if it doesn't (lazy initialization)
+            if not await self.collection_exists(collection):
+                if not embeddings:
+                    raise ValueError(f"Cannot auto-create collection '{collection}': no embeddings provided")
+                
+                # Detect dimension from first embedding
+                dimension = len(embeddings[0])
+                logger.warning(
+                    f"Collection '{collection}' doesn't exist. Auto-creating with dimension={dimension}"
+                )
+                await self.create_collection(collection, dimension)
+            
             points = [
                 PointStruct(
-                    id=chunk_id,
+                    id=self._string_to_uuid(chunk_id),
                     vector=embedding,
                     payload={
                         "content": document,
+                        "original_id": chunk_id,  # Store original ID in payload
                         **metadata  # Flatten metadata into payload
                     }
                 )
-                for chunk_id, embedding, document, metadata 
+                for chunk_id, embedding, document, metadata
                 in zip(ids, embeddings, documents, metadatas)
             ]
             
@@ -151,6 +181,10 @@ class QdrantStore(VectorStoreBase):
             if filters:
                 conditions = []
                 for field, values in filters.items():
+                    # Ensure values is a list
+                    if not isinstance(values, list):
+                        values = [values]
+                    
                     # Support filtering by entity types (organizations, people, etc.)
                     if field in ["organizations", "people", "dates", "locations", "topics"]:
                         conditions.append(
@@ -170,22 +204,44 @@ class QdrantStore(VectorStoreBase):
                 if conditions:
                     qdrant_filter = Filter(must=conditions)
             
-            results = await self.client.search(
+            response = await self.client.query_points(
                 collection_name=collection,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=top_k,
                 query_filter=qdrant_filter
             )
             
             # Convert to RetrievedChunk objects
             chunks = []
+            # query_points returns a QueryResponse with a points attribute
+            results = response.points if hasattr(response, 'points') else response
             for result in results:
                 # Extract metadata from payload
                 payload = dict(result.payload)
                 content = payload.pop("content", "")
                 
-                # Reconstruct ChunkMetadata
-                metadata = ChunkMetadata(**payload)
+                # Try to reconstruct ChunkMetadata, but handle cases where payload
+                # doesn't match ChunkMetadata structure (e.g., conversation_memory)
+                try:
+                    metadata = ChunkMetadata(**payload)
+                except Exception:
+                    # For non-standard collections, create a minimal ChunkMetadata
+                    # with required fields and store extra data in entities
+                    metadata = ChunkMetadata(
+                        chunk_id=payload.get("original_id", "unknown"),
+                        source_file=payload.get("source_file", "memory"),
+                        file_type=payload.get("file_type", "txt"),  # Use valid literal
+                        chunk_index=payload.get("chunk_index", 0),
+                        total_chunks=payload.get("total_chunks", 1),
+                        chunk_size=payload.get("chunk_size", len(content)),
+                        token_count=payload.get("token_count", 0),
+                        char_count=payload.get("char_count", len(content)),
+                        content_hash=payload.get("content_hash", ""),
+                        content_preview=payload.get("content_preview", content[:100]),
+                        created_at=payload.get("created_at", 0.0),
+                        processed_at=payload.get("processed_at", 0.0),
+                        entities=payload  # Store all extra fields in entities
+                    )
                 
                 chunks.append(
                     RetrievedChunk(
@@ -214,9 +270,12 @@ class QdrantStore(VectorStoreBase):
             Count of deleted documents
         """
         try:
+            # Convert string IDs to UUIDs
+            uuid_ids = [self._string_to_uuid(id_) for id_ in ids]
+            
             await self.client.delete(
                 collection_name=collection,
-                points_selector=ids
+                points_selector=uuid_ids
             )
             logger.info(f"Deleted {len(ids)} documents from Qdrant collection: {collection}")
             return len(ids)
@@ -236,9 +295,12 @@ class QdrantStore(VectorStoreBase):
             List of documents with metadata
         """
         try:
+            # Convert string IDs to UUIDs
+            uuid_ids = [self._string_to_uuid(id_) for id_ in ids]
+            
             results = await self.client.retrieve(
                 collection_name=collection,
-                ids=ids
+                ids=uuid_ids
             )
             return [result.payload for result in results]
         except Exception as e:
@@ -275,6 +337,18 @@ class QdrantStore(VectorStoreBase):
         except Exception as e:
             logger.error(f"Failed to list Qdrant collections: {e}")
             raise
+    
+    async def collection_exists(self, name: str) -> bool:
+        """Check if a collection exists.
+        
+        Args:
+            name: Collection name to check
+            
+        Returns:
+            True if collection exists, False otherwise
+        """
+        collections = await self.list_collections()
+        return name in collections
         
     async def health_check(self) -> bool:
         """

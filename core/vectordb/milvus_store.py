@@ -137,6 +137,18 @@ class MilvusStore(VectorStoreBase):
             Count of upserted documents
         """
         try:
+            # Check if collection exists, create if it doesn't (lazy initialization)
+            if not await self.collection_exists(collection):
+                if not embeddings:
+                    raise ValueError(f"Cannot auto-create collection '{collection}': no embeddings provided")
+                
+                # Detect dimension from first embedding
+                dimension = len(embeddings[0])
+                logger.warning(
+                    f"Collection '{collection}' doesn't exist. Auto-creating with dimension={dimension}"
+                )
+                await self.create_collection(collection, dimension)
+            
             coll = Collection(collection)
             
             # Prepare data
@@ -323,6 +335,18 @@ class MilvusStore(VectorStoreBase):
         except Exception as e:
             logger.error(f"Failed to list Milvus collections: {e}")
             raise
+    
+    async def collection_exists(self, name: str) -> bool:
+        """Check if a collection exists.
+        
+        Args:
+            name: Collection name to check
+            
+        Returns:
+            True if collection exists, False otherwise
+        """
+        collections = await self.list_collections()
+        return name in collections
         
     async def health_check(self) -> bool:
         """
